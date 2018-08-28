@@ -5,3 +5,4 @@ _venv
 .cache
 .pytest_cache
 *.egg*
+dist
