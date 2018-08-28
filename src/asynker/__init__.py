@@ -156,7 +156,7 @@ class Task(Future):
                 # This can/will trigger the exception stack to wind up,
                 # stuff like exception handling and context managers can now happen
                 # in the coroutine.
-                self._coroutine.throw(exc)
+                result = self._coroutine.throw(exc)
             else:
                 # Return the value provided by the future to the coroutine,
                 # i.e. .send(v) makes the "await" expression return "v".
