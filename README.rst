@@ -16,4 +16,5 @@ The Future class used in Asynker is unrelated to any of the various Future
 classes found in the Python standard library (for now, anyway).
 
 .. The name is a pun on asyncore and async+kern(el),
-   kernel being the set of vectors mapped to zero in linear algebra
+   kernel being the set of vectors mapped to zero in linear algebra.
+   Also... asynker... as in... it makes things asynk.
