@@ -100,47 +100,47 @@ def suspend():
 class Scheduler:
     def __init__(self):
         self._queue = collections.deque()
-        self._calls = collections.deque()
         self._blocked = []
 
     def tick(self):
         while self._queue:
-            typ, t = self._queue.popleft()
-            if typ == 0:
-                future, src = t
-                try:
-                    if src:
-                        result = future._tick(src._result, src.exception())
-                    else:
-                        result = future._tick()
-                except StopIteration as si:
-                    future.set_result(si.value)
-                except Exception as exc:
-                    future.set_exception(exc)
-                else:
-                    if isinstance(result, Future):
-                        result._scheduler = self
-                        result.add_done_callback(lambda src: self._queue.append((0, (future, src))))
-                    elif inspect.iscoroutine(result):
-                        f = ensure_future(result, self)
-                        f.add_done_callback(lambda src: self._queue.append((0, (future, src))))
-                    else:
-                        self._queue.append((0, (future, None)))
-            else:
-                cb, args = t
-                cb(*args)
+            cb, args = self._queue.popleft()
+            cb(*args)
 
     def run_until_complete(self, future_or_coroutine):
         future = ensure_future(future_or_coroutine, self)
-        self._queue.append((0, (future, None)))
+        self._queue_task(future)
         while not future.done():
             self.tick()
         return future.result()
 
     def run(self, future_or_coroutine):
         future = ensure_future(future_or_coroutine, self)
-        self._queue.append((0, (future, None)))
+        self._queue_task(future)
         return future
 
     def call_soon(self, cb, *args):
-        self._queue.append((1, (cb, args)))
+        self._queue.append((cb, args))
+
+    def _queue_task(self, task_future, src=None):
+        self._queue.append((self._task_step, (task_future, src)))
+
+    def _task_step(self, task_future, src):
+        try:
+            if src:
+                result = task_future._tick(src._result, src.exception())
+            else:
+                result = task_future._tick()
+        except StopIteration as si:
+            task_future.set_result(si.value)
+        except Exception as exc:
+            task_future.set_exception(exc)
+        else:
+            if isinstance(result, Future):
+                result._scheduler = self
+                result.add_done_callback(lambda src: self._queue_task(task_future, src))
+            elif inspect.iscoroutine(result):
+                f = ensure_future(result, self)
+                f.add_done_callback(lambda src: self._queue_task(task_future, src))
+            else:
+                self._queue_task(task_future)
