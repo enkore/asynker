@@ -1,6 +1,6 @@
 import pytest
 
-from asynker import Scheduler, suspend, Future
+from asynker import Scheduler, suspend, Future, CancelledError
 
 
 def test_chain():
@@ -44,7 +44,6 @@ def test_loop():
     sched = Scheduler()
     entry_future = sched.run(entry())
 
-    print(entry_future.done())
     sched.tick()
     assert not entry_future.done()
     f.set_result(666)
@@ -75,3 +74,32 @@ def test_loop_exc():
     assert entry_future.done()
     with pytest.raises(KeyError):
         entry_future.result()
+
+
+def test_cancel():
+    async def entry():
+        await suspend()
+        assert False
+
+    sched = Scheduler()
+    future = sched.run(entry())
+    assert future.cancel()
+    assert not future.cancelled()
+    sched.tick()
+    assert future.cancelled()
+    with pytest.raises(CancelledError):
+        future.result()
+
+
+def test_cancel_self():
+    async def entry():
+        future.cancel()
+        await suspend()
+        assert False
+
+    sched = Scheduler()
+    future = sched.run(entry())
+    sched.tick()
+    assert future.cancelled()
+    with pytest.raises(CancelledError):
+        future.result()

@@ -6,9 +6,13 @@ import types
 
 
 class FutureState(enum.Enum):
-    # Todo CANCELLED
     PENDING = 'pending'
     FINISHED = 'finished'
+    CANCELLED = 'cancelled'
+
+
+class CancelledError(Exception):
+    """Future/Task was cancelled."""
 
 
 class Future:
@@ -45,14 +49,21 @@ class Future:
         """
         return self._state != FutureState.PENDING
 
+    def cancel(self):
+        self._state = FutureState.CANCELLED
+        return True
+
+    def cancelled(self):
+        return self._state == FutureState.CANCELLED
+
     def result(self):
-        assert self._state == FutureState.FINISHED
+        assert self.done()
         if self._exception is not None:
             raise self._exception
         return self._result
 
     def exception(self):
-        assert self._state == FutureState.FINISHED
+        assert self.done()
         return self._exception
 
     def add_done_callback(self, fn):
@@ -108,6 +119,14 @@ class Task(Future):
     def __init__(self, coroutine, scheduler):
         super().__init__(scheduler)
         self._coroutine = coroutine
+        self._cancel = False
+        self._waits_on_future = None
+
+    def cancel(self):
+        if self.done():
+            return False
+        self._cancel = True
+        return True
 
     def _tick(self, source_future=None):
         # source_future is "what send us here",
@@ -118,6 +137,18 @@ class Task(Future):
             value = source_future._result
         else:
             exc = value = None
+
+        if self._cancel:
+            # When we are asked to cancel the execution of the coroutine, we inject
+            # a CancelledError exception at the next yield point of the coroutine.
+            # This overrides prior exceptions.
+            # Handling a CancelledError swallows any result you could've gotten out of an await/yield.
+            # So... you probably don't want to do that.
+            exc = CancelledError()
+            self._cancel = False
+
+        # We're running so we can't possibly be waiting on a future.
+        self._waits_on_future = None
 
         try:
             if exc is not None:
@@ -133,6 +164,9 @@ class Task(Future):
         except StopIteration as si:
             # This means the coroutine has returned and is now done.
             self.set_result(si.value)
+        except CancelledError as ce:
+            self.set_exception(ce)
+            self._state = FutureState.CANCELLED
         except Exception as exc:
             self.set_exception(exc)
         else:
@@ -161,12 +195,27 @@ class Task(Future):
             # because it can continue at least another iteration.
             if isinstance(result, Future):
                 result._scheduler = self._scheduler
-                result.add_done_callback(lambda src: self._scheduler._queue_task(self, src))
+                self._wait_on_future(result)
             elif inspect.iscoroutine(result):
                 f = ensure_future(result, self)
-                f.add_done_callback(lambda src: self._scheduler._queue_task(self, src))
+                self._wait_on_future(f)
             else:
                 self._scheduler._queue_task(self)
+
+    def _wait_on_future(self, future):
+        future.add_done_callback(lambda src: self._scheduler._queue_task(self, src))
+        self._waits_on_future = future
+        if self._cancel:
+            # If we are supposed to cancel the coroutine but now we are waiting on a future
+            # (because, remember, the cancellation can be caught and handled like any other
+            # exception inside the coroutine), then we reset the cancel flag on us,
+            # and instead pass it one level lower.
+            # This continues recursively (technically we'd process it iteratively) until the
+            # lowest-level future which will then be cancelled, produce a CancelledError
+            # exception and that exception will bubble the stack up in the opposite direction.
+            if future.cancel():
+                self._cancel = False
+
 
 
 def ensure_future(future_or_coroutine, scheduler):
