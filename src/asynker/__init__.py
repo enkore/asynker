@@ -109,6 +109,9 @@ class Task(Future):
         self._coroutine = coroutine
 
     def _tick(self, source_future=None):
+        # source_future is "what send us here",
+        # i.e. the coroutine awaited some future and
+        # *now* that future is completed and called source_future.
         if source_future:
             exc = source_future.exception()
             value = source_future._result
@@ -117,14 +120,44 @@ class Task(Future):
 
         try:
             if exc is not None:
+                # Inject the exception into the coroutine at the await-point.
+                # This can/will trigger the exception stack to wind up,
+                # stuff like exception handling and context managers can now happen
+                # in the coroutine.
                 self._coroutine.throw(exc)
             else:
+                # Return the value provided by the future to the coroutine,
+                # i.e. .send(v) makes the "await" expression return "v".
                 result = self._coroutine.send(value)
         except StopIteration as si:
+            # This means the coroutine has returned and is now done.
             self.set_result(si.value)
         except Exception as exc:
             self.set_exception(exc)
         else:
+            # "result" can be a couple of things.
+            # Basically, every "await" works like a "yield" in the sense that it returns
+            # whatever was handed to it back to whoever is one level above in the stack.
+            # That "whoever is one level above in the stack" is *us* -- we invoked the
+            # coroutine above.
+            #
+            # So, "foo = await async_bar()" will hand us the async_bar() coroutine-instance-thing
+            # (I'd call "async_bar" the coroutine here and async_bar() is an invocation of a it).
+            # In this case, we want to schedule that coroutine.
+            #
+            # "foo = await some_future" (which can look the same as above,
+            # e.g. "await some_regular_function_RETURNING_a_future()") will hand us some_future.
+            #
+            # In either case we'll simply resume the current coroutine invocation once
+            # the invoked coroutine / some_future has completed. Either is handled
+            # by converting it to a future first (if necessary) and adding a done callback
+            # to it enqueuing the current coroutine.
+            #
+            # The third case is we get some arbitrary value. This just means that somewhere
+            # a bare yield/await happened (e.g. suspend() is a case of this),
+            # which bubbles the value up to us as usual.
+            # In that case we immediately re-queue the current coroutine
+            # because it can continue at least another iteration.
             if isinstance(result, Future):
                 result._scheduler = self._scheduler
                 result.add_done_callback(lambda src: self._scheduler._queue_task(self, src))
