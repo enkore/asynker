@@ -103,3 +103,16 @@ def test_cancel_self():
     assert future.cancelled()
     with pytest.raises(CancelledError):
         future.result()
+
+
+def test_cancel_self_late():
+    async def entry():
+        await suspend()
+        future.cancel()
+
+    sched = Scheduler()
+    future = sched.run(entry())
+    sched.tick()
+    assert future.cancelled()
+    with pytest.raises(CancelledError):
+        future.result()

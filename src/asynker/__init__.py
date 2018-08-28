@@ -163,7 +163,13 @@ class Task(Future):
                 result = self._coroutine.send(value)
         except StopIteration as si:
             # This means the coroutine has returned and is now done.
-            self.set_result(si.value)
+            if self._cancel:
+                # A "late" cancellation, this can pretty much only happen if a coroutine cancels itself
+                # after the last yield point in the current control flow path.
+                self.set_exception(CancelledError())
+                self._state = FutureState.CANCELLED
+            else:
+                self.set_result(si.value)
         except CancelledError as ce:
             self.set_exception(ce)
             self._state = FutureState.CANCELLED
