@@ -1,0 +1,7 @@
+*~
+__pycache__
+_venv
+.idea
+.cache
+.pytest_cache
+*.egg*
