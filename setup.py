@@ -31,5 +31,6 @@ setup(
         'Programming Language :: Python :: 3.6',
     ],
 
-    py_modules='src/asynker.py',
+    packages=find_packages('src'),
+    package_dir={'': 'src'},
 )
