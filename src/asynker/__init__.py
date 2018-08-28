@@ -1,6 +1,7 @@
 import collections
 import enum
 import inspect
+import threading
 import types
 
 
@@ -228,3 +229,21 @@ class Scheduler:
 
     def _queue_task(self, task_future, src=None):
         self._queue.append((task_future._tick, (src,)))
+
+
+_thread_scheduler_tls = threading.local()
+
+
+def thread_scheduler():
+    """
+    Return a thread-specific Scheduler instance.
+
+    Always returns the same Scheduler when called from the same thread.
+
+    Never returns Scheduler instances not created by this function.
+    """
+    try:
+        return _thread_scheduler_tls.sched
+    except AttributeError:
+        _thread_scheduler_tls.sched = Scheduler()
+        return _thread_scheduler_tls.sched
