@@ -116,3 +116,27 @@ def test_cancel_self_late():
     assert future.cancelled()
     with pytest.raises(CancelledError):
         future.result()
+
+
+def test_cancel_all_tasks():
+    async def entry():
+        await suspend()
+        assert False
+
+    sched = Scheduler()
+    sched.run(entry())
+    sched.run(entry())
+    sched.run(entry())
+    sched.cancel_all_tasks()
+    sched.tick()
+
+
+def test_run_until_all_tasks_finished():
+    async def entry():
+        await suspend()
+        return 1234
+
+    sched = Scheduler()
+    future = sched.run(entry())
+    sched.run_until_all_tasks_finished()
+    assert future.result() == 1234

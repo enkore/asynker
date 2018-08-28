@@ -249,6 +249,7 @@ class Scheduler:
     def __init__(self):
         self._queue = collections.deque()
         self._blocked = []
+        self._tasks = set()
 
     def tick(self):
         """
@@ -268,6 +269,13 @@ class Scheduler:
             self.tick()
         return future.result()
 
+    def run_until_all_tasks_finished(self):
+        """
+        Run until there are no more running tasks/coroutines.
+        """
+        while self._tasks:
+            self.tick()
+
     def run(self, future_or_coroutine):
         """
         Add *future_or_coroutine* to the running set of futures.
@@ -282,7 +290,17 @@ class Scheduler:
         """
         self._queue.append((cb, args))
 
+    def cancel_all_tasks(self):
+        """
+        Cancel all currently running tasks (running coroutines).
+        """
+        for task in self._tasks:
+            task.cancel()
+
     def _queue_task(self, task_future, src=None):
+        if task_future not in self._tasks:
+            self._tasks.add(task_future)
+            task_future.add_done_callback(lambda tf: self._tasks.remove(task_future))
         self._queue.append((task_future._tick, (src,)))
 
 
