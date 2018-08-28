@@ -19,8 +19,9 @@ setup(
     description='Coroutine scheduler for Python 3.5\'s await syntax',
     long_description=description,
 
-    url=None,
+    url='https://github.com/enkore/asynker',
     author='Marian Beermann',
+    author_email='asynker@enkore.de',
 
     license='MIT',
 
