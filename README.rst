@@ -11,3 +11,6 @@ Asynker only provides the scheduling part. This generally only makes sense if
 you are using something else as the event loop, e.g. something callback-based.
 Asynker allows you to use a callback-based system and easily convert it into
 a coroutine/await-based system.
+
+The Future class used in Asynker is unrelated to any of the various Future
+classes found in the Python standard library (for now, anyway).

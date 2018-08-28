@@ -11,6 +11,24 @@ class FutureState(enum.Enum):
 
 
 class Future:
+    """
+    A future represents the result of some computation that may become available in *drumroll* the future.
+
+    A future starts out in PENDING state.
+
+    Calling set_result(v) transitions it to FINISHED state and
+    will resume dependent coroutines (i.e. those waiting on this Future)
+    at the next Scheduler.tick().
+
+    Calling set_exception(e) transitions it to FINISHED state as well
+    and generally works the same way as set_result(), but instead
+    of providing a value to dependent coroutines, they will blow
+    up with an exception.
+
+    result() retrieves the current result *or* raises the set exception;
+    ``x = await future()`` is semantically equivalent to
+    ``twiddle_thumbs_until(future.is.done); x = future.result()``.
+    """
     _state: FutureState = FutureState.PENDING
     _result = None
     _exception = None
@@ -74,6 +92,18 @@ class Future:
 
 
 class Task(Future):
+    """
+    A Task is a concretisation  of the Future concept;
+    it represents a thread (no, wait, loaded word)... uhm...
+    a *line* (fiber? oops...) of execution.
+
+    In other words, a Task object corresponds to a coroutine *invocation*
+    (the terminology is pretty loose here, in Python's terms, "async_foo()" *is* a coroutine),
+    so it is a concrete computation that can be advanced in response to Futures finishing.
+
+    The result() of a Task is the ``return`` value of the coroutine it represents.
+    """
+
     def __init__(self, coroutine, scheduler):
         super().__init__(scheduler)
         self._coroutine = coroutine
@@ -106,6 +136,12 @@ class Task(Future):
 
 
 def ensure_future(future_or_coroutine, scheduler):
+    """
+    Convert *future_or_coroutine* to a Future instance belonging to *scheduler*.
+
+    If *future_or_coroutine* is not a coroutine, it is assumed to be a Future
+    and consequently adopted to *scheduler*.
+    """
     if inspect.iscoroutine(future_or_coroutine):
         return Task(future_or_coroutine, scheduler)
     future_or_coroutine._scheduler = scheduler
@@ -114,6 +150,9 @@ def ensure_future(future_or_coroutine, scheduler):
 
 @types.coroutine
 def suspend():
+    """
+    Yield control to the scheduler for one iteration.
+    """
     yield
 
 
@@ -123,11 +162,17 @@ class Scheduler:
         self._blocked = []
 
     def tick(self):
+        """
+        Perform all currently pending actions, e.g. resuming runnable coroutines.
+        """
         while self._queue:
             cb, args = self._queue.popleft()
             cb(*args)
 
     def run_until_complete(self, future_or_coroutine):
+        """
+        Run *future_or_coroutine* until completion.
+        """
         future = ensure_future(future_or_coroutine, self)
         self._queue_task(future)
         while not future.done():
@@ -135,11 +180,17 @@ class Scheduler:
         return future.result()
 
     def run(self, future_or_coroutine):
+        """
+        Add *future_or_coroutine* to the running set of futures.
+        """
         future = ensure_future(future_or_coroutine, self)
         self._queue_task(future)
         return future
 
     def call_soon(self, cb, *args):
+        """
+        Call *cb* with *args* next time a .tick() happens.
+        """
         self._queue.append((cb, args))
 
     def _queue_task(self, task_future, src=None):
