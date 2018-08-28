@@ -78,11 +78,31 @@ class Task(Future):
         super().__init__(scheduler)
         self._coroutine = coroutine
 
-    def _tick(self, value=None, exc=None):
-        if exc is not None:
-            self._coroutine.throw(exc)
+    def _tick(self, source_future=None):
+        if source_future:
+            exc = source_future.exception()
+            value = source_future._result
         else:
-            return self._coroutine.send(value)
+            exc = value = None
+
+        try:
+            if exc is not None:
+                self._coroutine.throw(exc)
+            else:
+                result = self._coroutine.send(value)
+        except StopIteration as si:
+            self.set_result(si.value)
+        except Exception as exc:
+            self.set_exception(exc)
+        else:
+            if isinstance(result, Future):
+                result._scheduler = self._scheduler
+                result.add_done_callback(lambda src: self._scheduler._queue_task(self, src))
+            elif inspect.iscoroutine(result):
+                f = ensure_future(result, self)
+                f.add_done_callback(lambda src: self._scheduler._queue_task(self, src))
+            else:
+                self._scheduler._queue_task(self)
 
 
 def ensure_future(future_or_coroutine, scheduler):
@@ -123,24 +143,4 @@ class Scheduler:
         self._queue.append((cb, args))
 
     def _queue_task(self, task_future, src=None):
-        self._queue.append((self._task_step, (task_future, src)))
-
-    def _task_step(self, task_future, src):
-        try:
-            if src:
-                result = task_future._tick(src._result, src.exception())
-            else:
-                result = task_future._tick()
-        except StopIteration as si:
-            task_future.set_result(si.value)
-        except Exception as exc:
-            task_future.set_exception(exc)
-        else:
-            if isinstance(result, Future):
-                result._scheduler = self
-                result.add_done_callback(lambda src: self._queue_task(task_future, src))
-            elif inspect.iscoroutine(result):
-                f = ensure_future(result, self)
-                f.add_done_callback(lambda src: self._queue_task(task_future, src))
-            else:
-                self._queue_task(task_future)
+        self._queue.append((task_future._tick, (src,)))

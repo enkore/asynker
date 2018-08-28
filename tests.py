@@ -1,5 +1,3 @@
-import inspect
-
 import pytest
 
 from asynker import Scheduler, suspend, Future
