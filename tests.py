@@ -1,6 +1,6 @@
 import pytest
 
-from asynker import Scheduler, suspend, Future, CancelledError, gather
+from asynker import Scheduler, suspend, Future, CancelledError, gather, as_completed
 
 
 def test_chain():
@@ -174,3 +174,18 @@ def test_gather_exc():
     assert gf.done()
     with pytest.raises(KeyError):
         gf.result()
+
+
+def test_as_completed():
+    fut1 = Future()
+    fut2 = Future()
+    fut3 = Future()
+    sched = Scheduler()
+    ac = as_completed(fut1, fut2, fut3, scheduler=sched)
+
+    fut1.set_result(5)
+    assert sched.run_until_complete(ac.__anext__()) == 5
+    fut2.set_result(1)
+    assert sched.run_until_complete(ac.__anext__()) == 1
+    fut3.set_result(3)
+    assert sched.run_until_complete(ac.__anext__()) == 3

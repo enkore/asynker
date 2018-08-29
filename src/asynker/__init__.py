@@ -230,7 +230,15 @@ def ensure_future(future_or_coroutine, scheduler):
     If *future_or_coroutine* is not a coroutine, it is assumed to be a Future
     and consequently adopted to *scheduler*.
     """
-    if inspect.iscoroutine(future_or_coroutine):
+    d = dir(future_or_coroutine)
+    # The first case should be obvious
+    # The second case is asynchronous generator objects, i.e.
+    # async def foo(): yield 1; yield 2; ...
+    # => foo() returns an asynchronous generator object
+    # The third case is non-obvious but catches various coroutine-like objects,
+    # including async_generator_asend-objects, which is, in essence, a single-step coroutine
+    # corresponding to one yield of the generator.
+    if inspect.iscoroutine(future_or_coroutine) or inspect.isasyncgen(future_or_coroutine) or ('close' in d and 'send' in d and 'throw' in d):
         return Task(future_or_coroutine, scheduler)
     future_or_coroutine._scheduler = scheduler
     return future_or_coroutine
@@ -271,6 +279,41 @@ def gather(*futures_or_coroutines, scheduler):
         f.add_done_callback(done)
         scheduler.run(f)
     return gathering_future
+
+
+async def as_completed(*futures_or_coroutines, scheduler):
+    """
+    Yields results as they become available.
+    """
+    def done(fut):
+        futs.remove(fut)
+        if fut.exception():
+            blocker_future.set_exception(fut.exception())
+            for f in futs:
+                f.cancel()
+        else:
+            results.append(fut.result())
+            blocker_future.set_result(None)
+
+    blocker_future = Future()
+    futs = set()
+    results = []
+    for f in futures_or_coroutines:
+        f = ensure_future(f, scheduler)
+        futs.add(f)
+        f.add_done_callback(done)
+        scheduler.run(f)
+
+    while futs:
+        await blocker_future
+        blocker_future = Future()
+        res = results
+        results = []
+        for r in res:
+            yield r
+
+    for r in results:
+        yield r
 
 
 class Scheduler:
