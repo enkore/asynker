@@ -293,7 +293,8 @@ async def as_completed(*futures_or_coroutines, scheduler):
                 f.cancel()
         else:
             results.append(fut.result())
-            blocker_future.set_result(None)
+            if not blocker_future.done():
+                blocker_future.set_result(None)
 
     blocker_future = Future()
     futs = set()
