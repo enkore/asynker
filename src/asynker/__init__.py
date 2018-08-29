@@ -84,6 +84,7 @@ class Future:
         self._schedule_callbacks()
 
     def set_exception(self, exception):
+        assert self._state == FutureState.PENDING
         if isinstance(exception, type):
             exception = exception()
         self._state = FutureState.FINISHED
@@ -126,6 +127,7 @@ class Task(Future):
         if self.done():
             return False
         self._cancel = True
+        self._scheduler._queue_task(self)
         return True
 
     def _tick(self, source_future=None):
@@ -146,6 +148,9 @@ class Task(Future):
             # So... you probably don't want to do that.
             exc = CancelledError()
             self._cancel = False
+
+        if self.cancelled():
+            return
 
         # We're running so we can't possibly be waiting on a future.
         self._waits_on_future = None
@@ -168,6 +173,7 @@ class Task(Future):
                 # after the last yield point in the current control flow path.
                 self.set_exception(CancelledError())
                 self._state = FutureState.CANCELLED
+                self._cancel = False
             else:
                 self.set_result(si.value)
         except CancelledError as ce:
