@@ -83,6 +83,7 @@ class Network(QObject):
 class PageStats(QObject):
     done = pyqtSignal()
     result = pyqtSignal(dict)
+    summary = pyqtSignal(dict)
 
     def __init__(self, network, parent=None):
         super().__init__(parent)
@@ -98,17 +99,24 @@ class PageStats(QObject):
             print('Still working.')
 
     async def _fetch_stats(self, url):
-        results = []
+        def emit_result(result):
+            summary['requests'] += 1
+            summary['size'] += result['size']
+            self.result.emit(result)
+
+        summary = dict(requests=0, size=0)
         reply = await self.network.get(url)
         body = reply.readAll().data()
-        self.result.emit(dict(type='page', path='.', url=url, size=len(body)))
+        emit_result(dict(type='page', path='.', url=url, size=len(body)))
 
         # For simplicity, assume UTF-8.
         tree = lxml.html.document_fromstring(body.decode())
         ext_resources = self._extract_resources(tree, url)
 
         async for resource in asynker.as_completed(*[self._get_resource_size(r) for r in ext_resources], scheduler=self.network.sched):
-            self.result.emit(resource)
+            emit_result(resource)
+
+        self.summary.emit(summary)
 
     async def _get_resource_size(self, resource):
         reply = await self.network.get(resource['url'])
@@ -131,7 +139,7 @@ class PageStats(QObject):
             if 'src' in element.attrib:
                 add_resource('script', element.attrib['src'])
         for element in get_elements_with_tag('img'):
-            if 'src' in element.attrib:
+            if element.attrib.get('src'):
                 add_resource('image', element.attrib['src'])
 
         return resources
@@ -168,9 +176,11 @@ class MainWindow(QMainWindow):
         self.results = QTableWidget(0, 3)
         self.results.setHorizontalHeaderLabels(['Type', 'Path', 'Size'])
         self.results.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
+        self.results.setEditTriggers(QTableWidget.NoEditTriggers)
 
         self.pagestats.result.connect(self.show_result)
         self.pagestats.done.connect(self.done)
+        self.pagestats.summary.connect(self.show_summary)
 
         layout.addWidget(self.urlinput)
         layout.addWidget(self.dobutton)
@@ -192,7 +202,7 @@ class MainWindow(QMainWindow):
             self.results.clearContents()
             self.results.setRowCount(0)
         else:
-            print('Invalid url.')
+            self.statusBar().showMessage('Invalid url.')
 
     @pyqtSlot(dict)
     def show_result(self, result):
@@ -204,6 +214,11 @@ class MainWindow(QMainWindow):
         self.results.setItem(row, 0, item1)
         self.results.setItem(row, 1, item2)
         self.results.setItem(row, 2, item3)
+
+    @pyqtSlot(dict)
+    def show_summary(self, summary):
+        msg = '%s in %d requests' % (self.locale().formattedDataSize(summary['size']), summary['requests'])
+        self.statusBar().showMessage(msg)
 
     @pyqtSlot()
     def done(self):
