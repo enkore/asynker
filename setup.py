@@ -1,6 +1,6 @@
 from setuptools import setup, find_packages
 
-description = open('README.rst', 'r').read()
+description = open('README.rst', 'r', encoding='utf-8').read()
 
 setup(
     name='asynker',
