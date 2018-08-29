@@ -1,6 +1,6 @@
 import pytest
 
-from asynker import Scheduler, suspend, Future, CancelledError
+from asynker import Scheduler, suspend, Future, CancelledError, gather
 
 
 def test_chain():
@@ -140,3 +140,37 @@ def test_run_until_all_tasks_finished():
     future = sched.run(entry())
     sched.run_until_all_tasks_finished()
     assert future.result() == 1234
+
+
+def test_gather():
+    fut1 = Future()
+    fut2 = Future()
+    fut3 = Future()
+    sched = Scheduler()
+    gf = gather(fut1, fut2, fut3, scheduler=sched)
+    assert not gf.done()
+    fut1.set_result(1)
+    assert not gf.done()
+    fut3.set_result(3)
+    fut2.set_result(2)
+    assert not gf.done()
+    sched.tick()
+    assert gf.done()
+    assert gf.result() == [1, 3, 2]
+
+
+def test_gather_exc():
+    fut1 = Future()
+    fut2 = Future()
+    fut3 = Future()
+    sched = Scheduler()
+    gf = gather(fut1, fut2, fut3, scheduler=sched)
+    assert not gf.done()
+    fut1.set_result(1)
+    assert not gf.done()
+    fut3.set_exception(KeyError)
+    assert not gf.done()
+    sched.tick()
+    assert gf.done()
+    with pytest.raises(KeyError):
+        gf.result()

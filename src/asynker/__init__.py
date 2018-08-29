@@ -223,7 +223,6 @@ class Task(Future):
                 self._cancel = False
 
 
-
 def ensure_future(future_or_coroutine, scheduler):
     """
     Convert *future_or_coroutine* to a Future instance belonging to *scheduler*.
@@ -245,10 +244,38 @@ def suspend():
     yield
 
 
+def gather(*futures_or_coroutines, scheduler):
+    """
+    Wait for all futures and/or coroutines concurrently.
+
+    The await-expression will return a list of results in arbitrary order.
+    """
+    def done(fut):
+        futs.remove(fut)
+        if gathering_future.done():
+            fut.cancel()
+            return
+        elif fut.exception():
+            gathering_future.set_exception(fut.exception())
+        else:
+            results.append(fut.result())
+        if not futs:
+            gathering_future.set_result(results)
+
+    gathering_future = Future()
+    futs = set()
+    results = []
+    for f in futures_or_coroutines:
+        f = ensure_future(f, scheduler)
+        futs.add(f)
+        f.add_done_callback(done)
+        scheduler.run(f)
+    return gathering_future
+
+
 class Scheduler:
     def __init__(self):
         self._queue = collections.deque()
-        self._blocked = []
         self._tasks = set()
 
     def tick(self):
@@ -281,7 +308,8 @@ class Scheduler:
         Add *future_or_coroutine* to the running set of futures.
         """
         future = ensure_future(future_or_coroutine, self)
-        self._queue_task(future)
+        if isinstance(future, Task):
+            self._queue_task(future)
         return future
 
     def call_soon(self, cb, *args):
