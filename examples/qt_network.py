@@ -1,3 +1,13 @@
+"""
+This examples shows how Asynker can be used in a more complex setting.
+
+This is a graphical tool which can fetch a website and show the size of
+embedded resources (such as scripts, stylesheets and images) -- it's almost
+bordering on being useful for something.
+
+PyQt5 and lxml are required.
+"""
+
 import sys
 
 from PyQt5.QtCore import QObject, pyqtSlot, QEventLoop, QUrl, QThread, pyqtSignal, Q_ARG, Qt
@@ -71,7 +81,8 @@ class Network(QObject):
 
 
 class PageStats(QObject):
-    done = pyqtSignal(list)
+    done = pyqtSignal()
+    result = pyqtSignal(dict)
 
     def __init__(self, network, parent=None):
         super().__init__(parent)
@@ -90,19 +101,19 @@ class PageStats(QObject):
         results = []
         reply = await self.network.get(url)
         body = reply.readAll().data()
-        results.append(dict(type='page', path='.', url=url, size=len(body)))
+        self.result.emit(dict(type='page', path='.', url=url, size=len(body)))
 
         # For simplicity, assume UTF-8.
         tree = lxml.html.document_fromstring(body.decode())
         ext_resources = self._extract_resources(tree, url)
 
-        await asynker.gather(*[self._get_resource_size(r) for r in ext_resources], scheduler=self.network.sched)
-        results.extend(ext_resources)
-        return results
+        async for resource in asynker.as_completed(*[self._get_resource_size(r) for r in ext_resources], scheduler=self.network.sched):
+            self.result.emit(resource)
 
     async def _get_resource_size(self, resource):
         reply = await self.network.get(resource['url'])
         resource['size'] = len(reply.readAll().data())
+        return resource
 
     def _extract_resources(self, etree, base_url):
         def get_elements_with_tag(tag):
@@ -128,9 +139,7 @@ class PageStats(QObject):
     def _done(self, future):
         if future.exception():
             print('Exception in fetch_stats:', future.exception())
-            self.done.emit([])
-        else:
-            self.done.emit(future.result())
+        self.done.emit()
 
 
 class MainWindow(QMainWindow):
@@ -160,7 +169,8 @@ class MainWindow(QMainWindow):
         self.results.setHorizontalHeaderLabels(['Type', 'Path', 'Size'])
         self.results.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
 
-        self.pagestats.done.connect(self.show_results)
+        self.pagestats.result.connect(self.show_result)
+        self.pagestats.done.connect(self.done)
 
         layout.addWidget(self.urlinput)
         layout.addWidget(self.dobutton)
@@ -184,16 +194,19 @@ class MainWindow(QMainWindow):
         else:
             print('Invalid url.')
 
-    @pyqtSlot(list)
-    def show_results(self, results):
-        for n, result in enumerate(results):
-            item1 = QTableWidgetItem(result['type'])
-            item2 = QTableWidgetItem(result['path'])
-            item3 = QTableWidgetItem(self.locale().formattedDataSize(result['size']))
-            self.results.insertRow(n)
-            self.results.setItem(n, 0, item1)
-            self.results.setItem(n, 1, item2)
-            self.results.setItem(n, 2, item3)
+    @pyqtSlot(dict)
+    def show_result(self, result):
+        row = self.results.rowCount()
+        item1 = QTableWidgetItem(result['type'])
+        item2 = QTableWidgetItem(result['path'])
+        item3 = QTableWidgetItem(self.locale().formattedDataSize(result['size']))
+        self.results.insertRow(row)
+        self.results.setItem(row, 0, item1)
+        self.results.setItem(row, 1, item2)
+        self.results.setItem(row, 2, item3)
+
+    @pyqtSlot()
+    def done(self):
         self.dobutton.setEnabled(True)
 
 
