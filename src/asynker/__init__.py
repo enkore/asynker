@@ -374,21 +374,3 @@ class Scheduler:
             self._tasks.add(task_future)
             task_future.add_done_callback(lambda tf: self._tasks.remove(task_future))
         self._queue.append((task_future._tick, (src,)))
-
-
-_thread_scheduler_tls = threading.local()
-
-
-def thread_scheduler():
-    """
-    Return a thread-specific Scheduler instance.
-
-    Always returns the same Scheduler when called from the same thread.
-
-    Never returns Scheduler instances not created by this function.
-    """
-    try:
-        return _thread_scheduler_tls.sched
-    except AttributeError:
-        _thread_scheduler_tls.sched = Scheduler()
-        return _thread_scheduler_tls.sched
