@@ -179,22 +179,20 @@ class Task(Future):
             self.set_exception(exc)
         else:
             # "result" can be a couple of things.
-            # Basically, every "await" works like a "yield" in the sense that it returns
-            # whatever was handed to it back to whoever is one level above in the stack.
-            # That "whoever is one level above in the stack" is *us* -- we invoked the
-            # coroutine above.
+            # An "await" works mostly like a "yield from" (and *not* like a "yield" --
+            # an await is not necessarily a yield point of a coroutine, it depends on what
+            # the awaitable is/does).
+            # This means that await will pass values yielded from the awaitable back up
+            # the stack, to us (because we resumed the coroutine doing it).
             #
-            # So, "foo = await async_bar()" will hand us the async_bar() coroutine-instance-thing
-            # (I'd call "async_bar" the coroutine here and async_bar() is an invocation of a it).
-            # In this case, we want to schedule that coroutine.
+            # "foo = await some_coroutine()" will thus *not* pass a coroutine object to us,
+            # it will pass whatever some_coroutine() yield to us. If some_coroutine() never
+            # yields, then control never returns to us.
             #
-            # "foo = await some_future" (which can look the same as above,
+            # "foo = await some_future" (which can also look like calling a coroutine
             # e.g. "await some_regular_function_RETURNING_a_future()") will hand us some_future.
             #
-            # In either case we'll simply resume the current coroutine invocation once
-            # the invoked coroutine / some_future has completed. Either is handled
-            # by converting it to a future first (if necessary) and adding a done callback
-            # to it enqueuing the current coroutine.
+            # If we get a future, we add a done callback to it which will schedule the current coroutine.
             #
             # The third case is we get some arbitrary value. This just means that somewhere
             # a bare yield/await happened (e.g. suspend() is a case of this),
@@ -204,9 +202,6 @@ class Task(Future):
             if isinstance(result, Future):
                 result._scheduler = self._scheduler
                 self._wait_on_future(result)
-            elif inspect.iscoroutine(result):
-                f = ensure_future(result, self)
-                self._wait_on_future(f)
             else:
                 self._scheduler._queue_task(self)
 
