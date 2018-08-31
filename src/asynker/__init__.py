@@ -96,9 +96,6 @@ class Future:
         for cb in self._done_callbacks:
             self._scheduler.call_soon(cb, self)
 
-    def _tick(self):
-        pass
-
     def __await__(self):
         if not self.done():
             yield self
