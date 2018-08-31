@@ -133,13 +133,19 @@ class Task(Future):
         return True
 
     def _tick(self, source_future=None):
-        # source_future is "what send us here",
-        # i.e. the coroutine awaited some future and
-        # *now* that future is completed and called source_future.
         if source_future:
+            # source_future is "what send us here",
+            # i.e. the coroutine awaited some future and
+            # *now* that future is completed and called source_future.
             exc = source_future.exception()
             value = source_future._result
         else:
+            # When source_future is None, then there are two ways to end up here:
+            # (1) the initial run() of a Task was called
+            #     (at which point the coroutine is (1) either done because it never yielded
+            #      or (2) has reached the first yield point)
+            # (2) via Task.cancel() in which case we are here to inject the cancellation
+            #     into the coroutine regardless of its progression.
             exc = value = None
 
         if self._cancel:
@@ -148,13 +154,24 @@ class Task(Future):
             # This overrides prior exceptions.
             # Handling a CancelledError swallows any result you could've gotten out of an await/yield.
             # So... you probably don't want to do that.
-            exc = CancelledError()
-            self._cancel = False
+
+            if self._waits_on_future:
+                # If we are supposed to cancel the coroutine but we are waiting on a future,
+                # then we pass the cancellation one level lower.
+                # This continues recursively (technically we'd process it iteratively) until the
+                # lowest-level future which will then be cancelled, produce a CancelledError
+                # exception and that exception will bubble the stack up in the opposite direction.
+                self.cancel = False
+                self._waits_on_future.cancel()
+                self._waits_on_future = None
+                return
+            else:
+                exc = CancelledError()
+                self._cancel = False
 
         if self.cancelled():
             return
 
-        # We're running so we can't possibly be waiting on a future.
         self._waits_on_future = None
 
         try:
@@ -212,16 +229,6 @@ class Task(Future):
     def _wait_on_future(self, future):
         future.add_done_callback(lambda src: self._scheduler._queue_task(self, src))
         self._waits_on_future = future
-        if self._cancel:
-            # If we are supposed to cancel the coroutine but now we are waiting on a future
-            # (because, remember, the cancellation can be caught and handled like any other
-            # exception inside the coroutine), then we reset the cancel flag on us,
-            # and instead pass it one level lower.
-            # This continues recursively (technically we'd process it iteratively) until the
-            # lowest-level future which will then be cancelled, produce a CancelledError
-            # exception and that exception will bubble the stack up in the opposite direction.
-            if future.cancel():
-                self._cancel = False
 
 
 def ensure_future(future_or_coroutine, scheduler) -> Future:

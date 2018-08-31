@@ -65,7 +65,6 @@ def test_loop_exc():
     sched = Scheduler()
     entry_future = sched.run(entry())
 
-    print(entry_future.done())
     sched.tick()
     assert not entry_future.done()
     f.set_exception(KeyError)
@@ -87,6 +86,7 @@ def test_cancel():
     assert not future.cancelled()
     sched.tick()
     assert future.cancelled()
+    assert not future.cancel()
     with pytest.raises(CancelledError):
         future.result()
 
@@ -129,6 +129,37 @@ def test_cancel_all_tasks():
     sched.run(entry())
     sched.cancel_all_tasks()
     sched.tick()
+
+
+def test_cancel_recursively():
+    done_order = []
+
+    fut1 = Future()
+    fut2 = Future()
+
+    async def some_recursion(n=10):
+        if not n:
+            await fut1
+        else:
+            await some_recursion(n - 1)
+
+    async def entry():
+        await some_recursion()
+        await fut2
+
+    sched = Scheduler()
+    ef = sched.run(entry())
+
+    fut1.add_done_callback(done_order.append)
+    ef.add_done_callback(done_order.append)
+
+    sched.tick()
+    ef.cancel()
+    sched.tick()
+    assert fut1.cancelled()
+    assert ef.cancelled()
+    assert done_order == [fut1, ef]
+    assert not fut2.cancelled()
 
 
 def test_cancel_done_callback():
