@@ -172,6 +172,8 @@ def test_gather_exc():
     assert not gf.done()
     sched.tick()
     assert gf.done()
+    # fut3 failed, so the other pending futures should enter cancelled state.
+    assert fut2.cancelled()
     with pytest.raises(KeyError):
         gf.result()
 

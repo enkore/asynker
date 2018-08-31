@@ -50,7 +50,7 @@ class Future:
         return self._state != FutureState.PENDING
 
     def cancel(self):
-        self.set_exception(CancelledError)
+        self._exception = CancelledError()
         self._state = FutureState.CANCELLED
         return True
 
@@ -257,11 +257,10 @@ def gather(*futures_or_coroutines, scheduler):
     """
     def done(fut):
         futs.remove(fut)
-        if gathering_future.done():
-            fut.cancel()
-            return
-        elif fut.exception():
+        if fut.exception():
             gathering_future.set_exception(fut.exception())
+            for f in futs:
+                f.cancel()
         else:
             results.append(fut.result())
         if not futs:
