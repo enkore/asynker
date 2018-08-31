@@ -50,6 +50,7 @@ class Future:
         return self._state != FutureState.PENDING
 
     def cancel(self):
+        self.set_exception(CancelledError)
         self._state = FutureState.CANCELLED
         return True
 
@@ -171,14 +172,12 @@ class Task(Future):
             if self._cancel:
                 # A "late" cancellation, this can pretty much only happen if a coroutine cancels itself
                 # after the last yield point in the current control flow path.
-                self.set_exception(CancelledError())
-                self._state = FutureState.CANCELLED
+                super().cancel()
                 self._cancel = False
             else:
                 self.set_result(si.value)
-        except CancelledError as ce:
-            self.set_exception(ce)
-            self._state = FutureState.CANCELLED
+        except CancelledError:
+            super().cancel()
         except Exception as exc:
             self.set_exception(exc)
         else:
