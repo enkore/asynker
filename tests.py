@@ -191,3 +191,20 @@ def test_as_completed():
     assert sched.run_until_complete(ac.__anext__()) == 1
     fut3.set_result(3)
     assert sched.run_until_complete(ac.__anext__()) == 3
+
+
+def test_as_completed_exc():
+    fut1 = Future()
+    fut2 = Future()
+    fut3 = Future()
+    sched = Scheduler()
+    ac = as_completed(fut1, fut2, fut3, scheduler=sched)
+
+    fut1.set_result(5)
+    assert sched.run_until_complete(ac.__anext__()) == 5
+    fut2.set_exception(KeyError)
+    with pytest.raises(KeyError):
+        sched.run_until_complete(ac.__anext__())
+    assert fut3.cancelled()
+    with pytest.raises(StopAsyncIteration):
+        sched.run_until_complete(ac.__anext__())
