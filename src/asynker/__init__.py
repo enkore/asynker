@@ -161,7 +161,7 @@ class Task(Future):
                 # This continues recursively (technically we'd process it iteratively) until the
                 # lowest-level future which will then be cancelled, produce a CancelledError
                 # exception and that exception will bubble the stack up in the opposite direction.
-                self.cancel = False
+                self._cancel = False
                 self._waits_on_future.cancel()
                 self._waits_on_future = None
                 return
