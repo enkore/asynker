@@ -183,7 +183,13 @@ class Task(Future):
                 result = self._coroutine.throw(exc)
             else:
                 # Return the value provided by the future to the coroutine,
-                # i.e. .send(v) makes the "await" expression return "v".
+                # i.e. .send(v) makes the yield-point expression which returned control to us
+                # (e.g. an "await" expression somewhere in the call-stack of the coroutine this Task
+                # corresponds to) take on the value "v".
+                # Note how yielding and resuming can happen at any level in the call-stack of the
+                # coroutine; only top-level coroutines have Task objects (via ensure_future() or Scheduler.run()),
+                # all other coroutines invoked down the stack are managed by Python on the call stack
+                # of the coroutine and not by us (in fact we *can't* take control of them).
                 result = self._coroutine.send(value)
         except StopIteration as si:
             # This means the coroutine has returned and is now done.
