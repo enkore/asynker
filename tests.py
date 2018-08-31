@@ -131,6 +131,24 @@ def test_cancel_all_tasks():
     sched.tick()
 
 
+def test_cancel_done_callback():
+    done_called_by = None
+
+    def done(fut):
+        nonlocal done_called_by
+        done_called_by = fut
+
+    async def entry():
+        await suspend()
+
+    sched = Scheduler()
+    ef = sched.run(entry())
+    ef.add_done_callback(done)
+    ef.cancel()
+    sched.tick()
+    assert done_called_by == ef
+
+
 def test_run_until_all_tasks_finished():
     async def entry():
         await suspend()

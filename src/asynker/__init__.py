@@ -52,6 +52,7 @@ class Future:
     def cancel(self):
         self._exception = CancelledError()
         self._state = FutureState.CANCELLED
+        self._schedule_callbacks()
         return True
 
     def cancelled(self):
@@ -77,6 +78,9 @@ class Future:
             fn(self)
         else:
             self._done_callbacks.append(fn)
+
+    def remove_done_callback(self, fn):
+        self._done_callbacks.remove(fn)
 
     def set_result(self, result):
         assert self._state == FutureState.PENDING
@@ -220,7 +224,7 @@ class Task(Future):
                 self._cancel = False
 
 
-def ensure_future(future_or_coroutine, scheduler):
+def ensure_future(future_or_coroutine, scheduler) -> Future:
     """
     Convert *future_or_coroutine* to a Future instance belonging to *scheduler*.
 
@@ -260,6 +264,7 @@ def gather(*futures_or_coroutines, scheduler):
         if fut.exception():
             gathering_future.set_exception(fut.exception())
             for f in futs:
+                f.remove_done_callback(done)
                 f.cancel()
         else:
             results.append(fut.result())
@@ -286,6 +291,7 @@ async def as_completed(*futures_or_coroutines, scheduler):
         if fut.exception():
             blocker_future.set_exception(fut.exception())
             for f in futs:
+                f.remove_done_callback(done)
                 f.cancel()
         else:
             results.append(fut.result())
