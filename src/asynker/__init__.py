@@ -272,19 +272,28 @@ def gather(*futures_or_coroutines, scheduler):
 
     The await-expression will return a list of results in arbitrary order.
     """
+
+    def cancel_remaining_futures():
+        for f in futs:
+            f.remove_done_callback(done)
+            f.cancel()
+
     def done(fut):
         futs.remove(fut)
         if fut.exception():
             gathering_future.set_exception(fut.exception())
-            for f in futs:
-                f.remove_done_callback(done)
-                f.cancel()
+            cancel_remaining_futures()
         else:
             results.append(fut.result())
         if not futs:
             gathering_future.set_result(results)
 
+    def gathering_done(fut):
+        if fut.cancelled():
+            cancel_remaining_futures()
+
     gathering_future = Future()
+    gathering_future.add_done_callback(gathering_done)
     futs = set()
     results = []
     for f in futures_or_coroutines:
@@ -292,7 +301,7 @@ def gather(*futures_or_coroutines, scheduler):
         futs.add(f)
         f.add_done_callback(done)
         scheduler.run(f)
-    return gathering_future
+    return scheduler.run(gathering_future)
 
 
 async def as_completed(*futures_or_coroutines, scheduler):

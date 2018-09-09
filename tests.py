@@ -227,6 +227,24 @@ def test_gather_exc():
         gf.result()
 
 
+def test_gather_cancel():
+    """
+    Check: If a gather() future is cancelled, all source futures are cancelled.
+    """
+    fut1 = Future()
+    fut2 = Future()
+    fut3 = Future()
+    sched = Scheduler()
+    gf = gather(fut1, fut2, fut3, scheduler=sched)
+    assert not gf.done()
+    gf.cancel()
+    sched.tick()
+    assert fut1.cancelled()
+    assert fut2.cancelled()
+    assert fut3.cancelled()
+    assert gf.cancelled()
+
+
 def test_as_completed():
     fut1 = Future()
     fut2 = Future()
