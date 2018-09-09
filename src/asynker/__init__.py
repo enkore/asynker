@@ -222,7 +222,7 @@ class Task(Future):
             # If we get a future, we add a done callback to it which will schedule the current coroutine.
             #
             # The third case is we get some arbitrary value. This just means that somewhere
-            # a bare yield/await happened (e.g. suspend() is a case of this),
+            # a bare yield happened (e.g. suspend() is a case of this),
             # which bubbles the value up to us as usual.
             # In that case we immediately re-queue the current coroutine
             # because it can continue at least another iteration.
@@ -261,7 +261,7 @@ def ensure_future(future_or_coroutine, scheduler) -> Future:
 @types.coroutine
 def suspend():
     """
-    Yield control to the scheduler for one iteration.
+    Yield control to the scheduler.
     """
     yield
 
@@ -293,6 +293,8 @@ def gather(*futures_or_coroutines, scheduler):
             cancel_remaining_futures()
 
     gathering_future = Future()
+    # If the gathering future is cancelled, then we want to cancel all remaining source futures.
+    # The only way to know is via a done callback.
     gathering_future.add_done_callback(gathering_done)
     futs = set()
     results = []
@@ -313,6 +315,7 @@ async def as_completed(*futures_or_coroutines, scheduler):
             return
         futs.remove(fut)
         if fut.exception():
+            # If one source future fails, then re-raise the exception below and cancel all others.
             blocker_future.set_exception(fut.exception())
             for f in futs:
                 f.remove_done_callback(done)
@@ -322,6 +325,12 @@ async def as_completed(*futures_or_coroutines, scheduler):
             if not blocker_future.done():
                 blocker_future.set_result(None)
 
+    # We use an internal future, the blocker future,
+    # to signal that result(s) are available.
+    # There may be multiple results available, because the completion
+    # of the blocker future does not immediately return control to
+    # the "await blocker_future" below.
+    # This is always important to keep in mind with coroutines.
     blocker_future = Future()
     futs = set()
     results = []
@@ -332,6 +341,9 @@ async def as_completed(*futures_or_coroutines, scheduler):
         scheduler.run(f)
 
     while futs:
+        # Since a future can't be "uncompleted" or "reset"
+        # like a regular old flag, we replace the blocker future
+        # each time it's used.
         await blocker_future
         blocker_future = Future()
         res = results
