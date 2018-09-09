@@ -300,6 +300,8 @@ async def as_completed(*futures_or_coroutines, scheduler):
     Yields results as they become available.
     """
     def done(fut):
+        if blocker_future.cancelled():
+            return
         futs.remove(fut)
         if fut.exception():
             blocker_future.set_exception(fut.exception())
@@ -387,5 +389,5 @@ class Scheduler:
     def _queue_task(self, task_future, src=None):
         if task_future not in self._tasks:
             self._tasks.add(task_future)
-            task_future.add_done_callback(lambda tf: self._tasks.remove(task_future))
+            task_future.add_done_callback(self._tasks.remove)
         self._queue.append((task_future._tick, (src,)))

@@ -243,6 +243,11 @@ def test_as_completed():
 
 
 def test_as_completed_exc():
+    """
+    Check: If a source future to as_completed() throws an exception,
+           the iterator re-raises the exception and exits,
+           cancelling all remaining source futures.
+    """
     fut1 = Future()
     fut2 = Future()
     fut3 = Future()
@@ -257,3 +262,22 @@ def test_as_completed_exc():
     assert fut3.cancelled()
     with pytest.raises(StopAsyncIteration):
         sched.run_until_complete(ac.__anext__())
+
+
+def test_as_completed_cancel():
+    """
+    Check: If a source future to as_completed() completes after as_completed() is cancelled,
+           no crash occurs and the source future completion is ignored.
+    """
+    source_fut = Future()
+    sched = Scheduler()
+    ac = as_completed(source_fut, scheduler=sched)
+
+    as_completed_fut = sched.run(ac.__anext__())
+    sched.tick()
+    as_completed_fut.cancel()
+    sched.tick()
+    with pytest.raises(CancelledError):
+        sched.run_until_complete(as_completed_fut)
+    source_fut.set_exception(KeyError)
+    sched.tick()
