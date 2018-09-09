@@ -24,12 +24,6 @@ def signal(sig):
     return future
 
 
-async def run_event_loop():
-    while window.isVisible():
-        await suspend()
-        app.processEvents(QEventLoop.AllEvents | QEventLoop.WaitForMoreEvents)
-
-
 async def dialogue():
     await signal(button.clicked)
     edit.setText('Type something here.')
@@ -48,4 +42,8 @@ async def dialogue():
 scheduler = Scheduler()
 scheduler.run(dialogue())
 window.show()
-scheduler.run_until_complete(run_event_loop())
+
+# This is the event loop. The quit condition is quite simply the window being closed.
+while window.isVisible():
+    scheduler.tick()
+    app.processEvents(QEventLoop.AllEvents | QEventLoop.WaitForMoreEvents)
