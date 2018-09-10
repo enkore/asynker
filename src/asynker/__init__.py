@@ -285,7 +285,7 @@ def gather(*futures_or_coroutines, scheduler):
             cancel_remaining_futures()
         else:
             results.append(fut.result())
-        if not futs:
+        if not futs and not gathering_future.done():
             gathering_future.set_result(results)
 
     def gathering_done(fut):
