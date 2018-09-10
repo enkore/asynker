@@ -1,0 +1,8 @@
+language: python
+python:
+  - "3.6"
+install:
+  - pip install .[test] codecov pytest-cov
+script:
+  - py.test --cov=asynker
+  - codecov
