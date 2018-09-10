@@ -18,6 +18,9 @@ classes found in the Python standard library (for now, anyway).
 Features
 --------
 
+.. image:: https://codecov.io/gh/enkore/asynker/branch/master/graph/badge.svg
+  :target: https://codecov.io/gh/enkore/asynker
+
 - Does over 900000 yields per second :sup:`[citation needed]`
 - The API is like asyncio but different enough to probably introduce interesting behaviours
   for study in your code
