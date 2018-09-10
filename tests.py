@@ -53,6 +53,29 @@ def test_loop():
     assert entry_future.result() == 666
 
 
+def test_await_finished():
+    f = Future()
+    f.set_result(42)
+
+    async def entry():
+        return await f
+
+    sched = Scheduler()
+    assert sched.run_until_complete(entry()) == 42
+
+
+def test_await_finished_exc():
+    f = Future()
+    f.set_exception(KeyError)
+
+    async def entry():
+        return await f
+
+    sched = Scheduler()
+    with pytest.raises(KeyError):
+        sched.run_until_complete(entry())
+
+
 def test_loop_exc():
     f = Future()
 
