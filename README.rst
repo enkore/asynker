@@ -33,3 +33,5 @@ Features
 
 .. image:: https://dev.azure.com/public0729/asynker/_apis/build/status/enkore.asynker?branchName=master
    :target: https://dev.azure.com/public0729/asynker/_build/latest?definitionId=1?branchName=master
+.. image:: https://api.travis-ci.org/enkore/asynker.svg?branch=master
+   :target: https://travis-ci.org/enkore/asynker
