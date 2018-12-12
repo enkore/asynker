@@ -30,3 +30,6 @@ Features
 .. The name is a pun on asyncore and async+kern(el),
    kernel being the set of vectors mapped to zero in linear algebra.
    Also... asynker... as in... it makes things asynk.
+
+.. image:: https://dev.azure.com/public0729/asynker/_apis/build/status/enkore.asynker?branchName=master
+   :target: https://dev.azure.com/public0729/asynker/_build/latest?definitionId=1?branchName=master
