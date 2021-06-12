@@ -1,7 +1,6 @@
 import collections
 import enum
 import inspect
-import threading
 import types
 
 
